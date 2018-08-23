@@ -2,7 +2,8 @@ package pkauth
 
 import (
 	"github.com/ethereum/go-ethereum/common"
-	"time"
+	"github.com/ethereum/go-ethereum/crypto"
+	"errors"
 )
 
 type User struct {
@@ -10,13 +11,15 @@ type User struct {
 	Address common.Address `json:"address"`
 	Password []byte `json:"password"`
 	SessionID string `json:"session_id"`
-	SessionTimeout time.Time `json:"sessiontimeout"`
-	SessionVerified bool `json:"sessionverified"`
+	MessageHash []byte `json:"messagehash"`
+	SignatureHash string `json:"signaturehash"`
 }
 
-func (u User) confirmPassword() (bool, error) {
-
-
-	return true, nil
+func (u User) confirmPKSignature(uSignature *User) error {
+	b := crypto.VerifySignature(u.Address.Bytes(), u.MessageHash, []byte(uSignature.SignatureHash))
+	if !b {
+		return errors.New("pkauth: PK Signature not valid")
+	}
+	return nil
 }
 
