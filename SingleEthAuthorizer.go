@@ -1,16 +1,22 @@
 package pkauth
 
-import "net/http"
+import (
+	"net/http"
+	"github.com/gin-gonic/gin/json"
+)
 
 type SingleEthAuthorizer struct {
 	Storage DB
 	SigninURL string
-	PKSignURL string
 	h http.Handler
 }
 
-func (s SingleEthAuthorizer) Authorize(h http.Handler) http.Handler {
-	s2 := SingleEthAuthorizer{}(s.Storage, s.SigninURL, h)
+func (s SingleEthAuthorizer) Authorize(hd http.Handler) http.Handler {
+	s2 := SingleEthAuthorizer{
+		Storage: s.Storage,
+		SigninURL: s.SigninURL,
+		h: hd,
+	}
 	return s2
 }
 
@@ -30,15 +36,34 @@ func (s SingleEthAuthorizer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	// Get user data, get if session verified and not past timeout
-	err = s.sessionValid(c.String())
+	err = VerifySession(s.Storage, c.String())
 	if err != nil {
-		http.Redirect(w, r, s.SigninURL, 302)
+		err = s.verifyPKSignature(r, c)
+		if err != nil {
+			http.Redirect(w, r, s.SigninURL, 302)
+		}
 	}
 	s.h.ServeHTTP(w, r)
 }
 
-
-func (s SingleEthAuthorizer) sessionValid(session_id string) error {
-
+func (s SingleEthAuthorizer) verifyPKSignature(r *http.Request, c *http.Cookie) error {
+	session, err := GetSession(s.Storage, c.String())
+	if err != nil {
+		return err
+	}
+	user, err := GetUser(s.Storage, session.Username)
+	if err != nil {
+		return err
+	}
+	var uSignature *User
+	d := json.NewDecoder(r.Body)
+	err = d.Decode(uSignature)
+	if err != nil {
+		return err
+	}
+	err = user.confirmPKSignature(uSignature)
+	if err != nil {
+		return err
+	}
 	return nil
 }
